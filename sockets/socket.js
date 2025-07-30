@@ -1,37 +1,102 @@
 import { Server } from "socket.io";
-
+import User from "../models/user.js";
+import Message from "../models/messages.js";
 export let io = null;
 export let onlineUsers = new Map();
 
 export const initSocket = (ioInstance) => {
   io = ioInstance;
 
-  io.on('connection', (socket) => {
-    console.log('Socket connected:', socket.id);
+  io.on("connection", (socket) => {
+    console.log("Socket connected:", socket.id);
 
-    socket.on('join', (userId) => {
+    socket.on("register", async (userId) => {
+      socket.userId = userId;
       onlineUsers.set(userId, socket.id);
-      console.log(`User ${userId} joined as ${socket.id}`);
+      await User.findByIdAndUpdate(userId, { isOnline: true });
+
+      // Notify everyone that this user is online
+      io.emit("user-status", { userId, isOnline: true });
+      console.log(`User ${userId} is online`);
+
+      // ✅ Send currently online users to the newly connected user only
+      const onlineUserIds = Array.from(onlineUsers.keys());
+      io.to(socket.id).emit("initial-online-users", onlineUserIds);
     });
 
-    socket.on('sendMessage', ({ senderId, receiverId, message }) => {
-      const receiverSocketId = onlineUsers.get(receiverId);
-      if (receiverSocketId) {
-        io.to(receiverSocketId).emit('receiveMessage', {
-          senderId,
-          message,
-        });
+    socket.on("typing", ({ from, to }) => {
+      const toSocket = onlineUsers.get(to);
+      if (toSocket) {
+        io.to(toSocket).emit("typing", { from });
       }
     });
 
-    socket.on('disconnect', () => {
-      for (const [userId, socketId] of onlineUsers) {
-        if (socketId === socket.id) {
-          onlineUsers.delete(userId);
-          break;
+    socket.on("send-message", async ({ sender, receiver, text, image }) => {
+      try {
+        let message;
+        if (!image) {
+          message = await Message.create({
+            senderId: sender,
+            receiverId: receiver,
+            text: text || "",
+            image: image || "", // <- this will be base64 string
+          });
+        } else {
+          message = {
+            senderId: sender,
+            receiverId: receiver,
+            text: text || "",
+            image: image || "",
+          };
         }
+
+        const toSocket = onlineUsers.get(receiver);
+        const fromSocket = onlineUsers.get(sender);
+        if (toSocket) {
+          io.to(toSocket).emit("receive-message", message);
+
+          // 🔔 Notify receiver of unseen message
+          io.to(toSocket).emit("unseen-message", {
+            senderId: sender,
+            receiverId: receiver,
+          });
+        }
+
+        // ✅ Confirm to sender
+        if (fromSocket) io.to(fromSocket).emit("message-sent", message);
+      } catch (err) {
+        console.error("Socket send-message error:", err.message);
       }
-      console.log('Socket disconnected:', socket.id);
+    });
+
+    socket.on("mark-seen", async ({ senderId, receiverId }) => {
+      try {
+        // ✅ Update unseen messages from sender to receiver
+        await Message.updateMany(
+          { senderId, receiverId, seen: false },
+          { $set: { seen: true } }
+        );
+
+        // 🔄 Notify sender in real-time
+        const toSocket = onlineUsers.get(senderId);
+        if (toSocket) {
+          io.to(toSocket).emit("messages-seen", { by: receiverId });
+        }
+      } catch (error) {
+        console.error("Error marking messages as seen:", error.message);
+      }
+    });
+
+    socket.on("disconnect", async () => {
+      const userId = socket.userId; // <-- directly access attached userId
+      if (userId) {
+        onlineUsers.delete(userId);
+        await User.findByIdAndUpdate(userId, { isOnline: false });
+        io.emit("user-status", { userId, isOnline: false });
+        console.log(`User ${userId} went offline`);
+      }
+      console.log("Disconnect hua:", socket.id);
+      console.log("Online Users map:", onlineUsers);
     });
   });
 };

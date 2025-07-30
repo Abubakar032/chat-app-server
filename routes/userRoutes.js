@@ -10,6 +10,6 @@ router.post('/verify-signup', verifyAndSignup);   // verifies and creates user
 router.post('/login', login); 
 
 router.get('/profile', authenticate, getProfile);
-router.put('/update-profile', authenticate, upload.single('profilImage'), updateProfile);
+router.put('/update-profile', authenticate, upload.single('profileImage'), updateProfile);
 
 export default router;

@@ -3,6 +3,7 @@ import Message from "../models/messages.js";
 import cloudinary from "../config/cloudinary.js";
 import fs from "fs";
 import { io, onlineUsers } from "../sockets/socket.js"; // <-- import io and onlineUsers
+import mongoose from "mongoose";
 
 export const getUsersForSidebar = async (req, res) => {
   try {
@@ -44,10 +45,20 @@ export const getUsersForSidebar = async (req, res) => {
   }
 };
 
+
 export const getMessages = async (req, res) => {
   try {
     const { id: selectedUserId } = req.params;
     const myId = req.user._id;
+
+    // ✅ Validate selectedUserId
+    if (!selectedUserId || !mongoose.Types.ObjectId.isValid(selectedUserId)) {
+      return res.status(400).json({ success: false, message: "Invalid selected user ID" });
+    }
+
+    // ✅ Debug logs (optional)
+    console.log("getMessages - myId:", myId);
+    console.log("getMessages - selectedUserId:", selectedUserId);
 
     const messages = await Message.find({
       $or: [
@@ -56,7 +67,7 @@ export const getMessages = async (req, res) => {
       ],
     });
 
-    // Mark selected user's messages as seen
+    // ✅ Mark messages as seen
     await Message.updateMany(
       { senderId: selectedUserId, receiverId: myId },
       { seen: true }
@@ -68,6 +79,7 @@ export const getMessages = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 export const markMessageAsSeen = async (req, res) => {
   try {
@@ -85,20 +97,14 @@ export const markMessageAsSeen = async (req, res) => {
 export const sendMessage = async (req, res) => {
   try {
     const senderId = req.user._id;
-    const receiverId = req.query.receiverId; // query se receiverId lo
+    const receiverId = req.query.receiverId;
     const { text, image } = req.body;
 
     if (!receiverId) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "receiverId is required in query params",
-        });
+      return res.status(400).json({ success: false, message: 'receiverId is required in query params' });
     }
 
-    let imageUrl = "";
-
+    let imageUrl = '';
     if (req.file) {
       const result = await cloudinary.uploader.upload(req.file.path);
       imageUrl = result.secure_url;
@@ -110,30 +116,31 @@ export const sendMessage = async (req, res) => {
     const newMessage = await Message.create({
       senderId,
       receiverId,
-      message: text,
+      text,
       image: imageUrl,
     });
 
-    // Socket notification
-    const receiverSocketId = onlineUsers.get(receiverId);
-    if (receiverSocketId && io) {
-      io.to(receiverSocketId).emit("receiveMessage", {
-        senderId,
-        receiverId,
-        message: newMessage.message,
-        image: newMessage.image,
-        _id: newMessage._id,
-        createdAt: newMessage.createdAt,
-      });
+    // 🔥 Real-time emit via Socket.IO
+    const toSocket = global.onlineUsers?.get(receiverId); // Depends how you stored onlineUsers
+    const fromSocket = global.onlineUsers?.get(senderId);
+
+    if (toSocket) {
+      req.io.to(toSocket).emit('receive-message', newMessage);
+    }
+
+    if (fromSocket) {
+      req.io.to(fromSocket).emit('message-sent', newMessage);
     }
 
     res.status(201).json({
       success: true,
-      message: "Message sent successfully",
+      message: 'Message sent successfully',
       data: newMessage,
     });
   } catch (error) {
-    console.error("sendMessage error:", error.message);
-    res.status(500).json({ success: false, message: "Server error" });
+    console.error('sendMessage error:', error.message);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+
+

@@ -11,18 +11,17 @@ const messageSchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
-  text: { 
+  text: {
     type: String,
   },
   image: {
     type: String,
   },
-  seen:{
+  seen: {
     type: Boolean,
     default: false,
   }
- 
 }, { timestamps: true });
 
-const User = mongoose.model('messages', messageSchema);
-export default User;
+const Message = mongoose.model('messages', messageSchema);
+export default Message;
