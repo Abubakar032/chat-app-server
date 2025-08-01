@@ -32,10 +32,13 @@ app.use("/api/messages", messageRoutes);
 const server = http.createServer(app);
 
 // Socket.IO setup
+
+const url =
+  "https://chapp-app-front-end-oc4i.vercel.app" || "http://localhost:3000";
 const io = new Server(server, {
   pingTimeout: 60000,
   cors: {
-    origin: "http://localhost:3000",
+    origin: url,
   },
 });
 
