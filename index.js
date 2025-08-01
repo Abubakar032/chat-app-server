@@ -33,12 +33,11 @@ const server = http.createServer(app);
 
 // Socket.IO setup
 
-const url =
-  "https://chapp-app-front-end-oc4i.vercel.app" || "http://localhost:3000";
+const url = "https://chapp-app-front-end-oc4i.vercel.app";
 const io = new Server(server, {
   pingTimeout: 60000,
   cors: {
-    origin: url,
+    origin: "https://chapp-app-front-end-oc4i.vercel.app",
   },
 });
 
