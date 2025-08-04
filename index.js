@@ -33,7 +33,7 @@ const server = http.createServer(app);
 
 // Socket.IO setup
 
-const url ="https://chapp-app-front-end-oc4i.vercel.app" || "http://localhost:3000";
+const url = "https://chapp-app-front-end-oc4i.vercel.app";
 // const url = "http://localhost:3000";
 
 const io = new Server(server, {
@@ -41,6 +41,7 @@ const io = new Server(server, {
   cors: {
     origin: url,
   },
+  methods: ["GET", "POST", "PUT", "DELETE"],
 });
 
 initSocket(io); // ✅ Initialize Socket.IO
