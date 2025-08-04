@@ -87,6 +87,48 @@ export const initSocket = (ioInstance) => {
       }
     });
 
+    socket.on("call-user", ({ to, offer }) => {
+      const toSocket = onlineUsers.get(to);
+      if (toSocket) {
+        io.to(toSocket).emit("call-made", { offer, from: socket.userId });
+      }
+    });
+
+    // Callee sends answer to caller
+    socket.on("make-answer", ({ to, answer }) => {
+      const toSocket = onlineUsers.get(to);
+      if (toSocket) {
+        io.to(toSocket).emit("answer-made", { answer, from: socket.userId });
+      }
+    });
+
+    // ICE candidates exchange
+    socket.on("ice-candidate", ({ to, candidate }) => {
+      const toSocket = onlineUsers.get(to);
+      if (toSocket) {
+        io.to(toSocket).emit("ice-candidate", {
+          candidate,
+          from: socket.userId,
+        });
+      }
+    });
+
+    // ✅ Add this for rejecting call
+    socket.on("reject-call", ({ to }) => {
+      const toSocket = onlineUsers.get(to);
+      if (toSocket) {
+        io.to(toSocket).emit("call-rejected", { from: socket.userId });
+      }
+    });
+
+    // ✅ Add this for cancelling outgoing call
+    socket.on("cancel-call", ({ to }) => {
+      const toSocket = onlineUsers.get(to);
+      if (toSocket) {
+        io.to(toSocket).emit("call-cancelled", { from: socket.userId });
+      }
+    });
+
     socket.on("disconnect", async () => {
       const userId = socket.userId; // <-- directly access attached userId
       if (userId) {
